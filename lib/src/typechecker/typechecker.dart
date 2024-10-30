@@ -194,7 +194,10 @@ StellaType typecheckExpression(
       final argType =
           typecheckExpression(argExprList.first, context, paramType);
 
-      if (argType != paramType) {
+      if (argType != paramType &&
+          paramType is TypeSum &&
+          paramType.stellaType1 != argType &&
+          paramType.stellaType2 != argType) {
         throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_PARAMETER;
       }
 
@@ -390,7 +393,7 @@ StellaType typecheckExpression(
       }
 
       if (expectedType != null && expectedType is! TypeList) {
-        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+        throw StellaTypeError.ERROR_UNEXPECTED_LIST;
       }
 
       if (expectedType != null &&
@@ -420,7 +423,8 @@ StellaType typecheckExpression(
       }
 
       final headType = typecheckExpression(head, context);
-      final tailType = typecheckExpression(tail, context, headType);
+      final tailType =
+          typecheckExpression(tail, context, TypeList(stellaType: headType));
 
       if (tailType is! TypeList) {
         throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
@@ -455,6 +459,47 @@ StellaType typecheckExpression(
 
       return TypeBool();
 
+    case Variant(stellaIdent: final label, exprData: final exprData):
+      if (expectedType == null) {
+        throw StellaTypeError.ERROR_AMBIGUOUS_VARIANT_TYPE;
+      }
+      if (expectedType is! TypeVariant) {
+        throw StellaTypeError.ERROR_UNEXPECTED_VARIANT;
+      }
+
+      final variantType = expectedType;
+      var fieldType = variantType.variantFieldTypeList.firstWhere(
+        (field) => switch (field) {
+          AVariantFieldType(stellaIdent: final name) => name == label,
+        },
+        orElse: () => throw StellaTypeError.ERROR_UNEXPECTED_VARIANT_LABEL,
+      );
+      fieldType = switch (fieldType) {
+        AVariantFieldType() => fieldType,
+      };
+
+      final expectedFieldType = switch (fieldType.optionalTyping) {
+        SomeTyping(stellaType: final fieldTypeType) => fieldTypeType,
+        NoTyping() => null,
+      };
+
+      switch (exprData) {
+        case SomeExprData(expr: final innerExpr):
+          final exprType =
+              typecheckExpression(innerExpr, context, expectedFieldType);
+          if (expectedFieldType != null && exprType != expectedFieldType) {
+            throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+          }
+          break;
+        case NoExprData():
+          if (expectedFieldType != null) {
+            throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+          }
+          break;
+      }
+
+      return expectedType;
+
     case Sequence():
     // TODO: Handle this case.
     case Assign():
@@ -476,8 +521,6 @@ StellaType typecheckExpression(
     case NotEqual():
     // TODO: Handle this case.
     case TypeCast():
-    // TODO: Handle this case.
-    case Variant():
     // TODO: Handle this case.
     case Add():
     // TODO: Handle this case.
@@ -540,8 +583,44 @@ void typecheckPattern(Pattern pattern, StellaType type, Context context) {
       }
       typecheckPattern(innerPattern, type.stellaType2, context);
 
-    case PatternVariant():
-    // TODO: Handle this case.
+    case PatternVariant(
+        stellaIdent: final label,
+        patternData: final patternData,
+      ):
+      if (type is! TypeVariant) {
+        throw StellaTypeError.ERROR_UNEXPECTED_PATTERN_FOR_TYPE;
+      }
+
+      final variantType = type;
+      var fieldType = variantType.variantFieldTypeList.firstWhere(
+        (field) => switch (field) {
+          AVariantFieldType(stellaIdent: final name) => name == label,
+        },
+        orElse: () => throw StellaTypeError.ERROR_UNEXPECTED_VARIANT_LABEL,
+      );
+      fieldType = switch (fieldType) {
+        AVariantFieldType() => fieldType,
+      };
+
+      final expectedFieldType = switch (fieldType.optionalTyping) {
+        SomeTyping(stellaType: final fieldTypeType) => fieldTypeType,
+        NoTyping() => null,
+      };
+
+      switch (patternData) {
+        case SomePatternData(pattern: final innerPattern):
+          if (expectedFieldType == null) {
+            throw StellaTypeError.ERROR_UNEXPECTED_PATTERN_FOR_TYPE;
+          }
+          typecheckPattern(innerPattern, expectedFieldType, context);
+          break;
+        case NoPatternData():
+          if (expectedFieldType != null) {
+            throw StellaTypeError.ERROR_UNEXPECTED_PATTERN_FOR_TYPE;
+          }
+          break;
+      }
+      break;
     case PatternTuple():
     // TODO: Handle this case.
     case PatternRecord():
@@ -569,12 +648,15 @@ void collectPatternLabels(Pattern pattern, Set<String> matchedLabels) {
     case PatternVariant(stellaIdent: final label):
       matchedLabels.add(label);
       break;
+
     case PatternInl():
       matchedLabels.add('inl');
       break;
+
     case PatternInr():
       matchedLabels.add('inr');
       break;
+
     default:
       break;
   }
