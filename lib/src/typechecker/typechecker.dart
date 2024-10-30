@@ -566,6 +566,66 @@ StellaType typecheckExpression(
       }
       return expectedType;
 
+    case Panic():
+      if (expectedType == null) {
+        throw StellaTypeError.ERROR_AMBIGUOUS_PANIC_TYPE;
+      }
+      return expectedType;
+
+    case StellaThrow(expr: final throwExpr):
+      if (!context.exceptionTypeDeclared) {
+        throw StellaTypeError.ERROR_EXCEPTION_TYPE_NOT_DECLARED;
+      }
+
+      final throwExprType =
+          typecheckExpression(throwExpr, context, context.exceptionType);
+
+      if (throwExprType != context.exceptionType) {
+        throw StellaTypeError.ERROR_EXCEPTION_TYPE_NOT_DECLARED;
+      }
+
+      if (expectedType == null) {
+        throw StellaTypeError.ERROR_AMBIGUOUS_THROW_TYPE;
+      }
+
+      return expectedType;
+
+    case TryWith(expr1: final tryExpr, expr2: final withExpr):
+      final tryExprType = typecheckExpression(tryExpr, context, expectedType);
+      final withExprType = typecheckExpression(withExpr, context, expectedType);
+
+      if (expectedType != null &&
+          (tryExprType != expectedType || withExprType != expectedType)) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      if (tryExprType != withExprType) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      return tryExprType;
+
+    case TryCatch(
+        expr1: final tryExpr,
+        pattern: final catchPattern,
+        expr2: final catchExpr,
+      ):
+      if (!context.exceptionTypeDeclared) {
+        throw StellaTypeError.ERROR_EXCEPTION_TYPE_NOT_DECLARED;
+      }
+
+      final tryType = typecheckExpression(tryExpr, context, expectedType);
+
+      final newContext = Context.newFrom(context);
+      typecheckPattern(catchPattern, context.exceptionType!, context);
+      final catchType = typecheckExpression(catchExpr, newContext);
+
+      if (catchType != tryType) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      return tryType;
+
     case LetRec():
     // TODO: Handle this case.
     case TypeAbstraction():
@@ -597,14 +657,6 @@ StellaType typecheckExpression(
     case LogicAnd():
     // TODO: Handle this case.
     case TypeApplication():
-    // TODO: Handle this case.
-    case Panic():
-    // TODO: Handle this case.
-    case StellaThrow():
-    // TODO: Handle this case.
-    case TryCatch():
-    // TODO: Handle this case.
-    case TryWith():
     // TODO: Handle this case.
     case LogicNot():
     // TODO: Handle this case.
@@ -675,6 +727,10 @@ void typecheckPattern(Pattern pattern, StellaType type, Context context) {
           break;
       }
       break;
+
+    case PatternInt():
+      break;
+
     case PatternTuple():
     // TODO: Handle this case.
     case PatternRecord():
@@ -688,8 +744,6 @@ void typecheckPattern(Pattern pattern, StellaType type, Context context) {
     case PatternTrue():
     // TODO: Handle this case.
     case PatternUnit():
-    // TODO: Handle this case.
-    case PatternInt():
     // TODO: Handle this case.
     case PatternSucc():
       // TODO: Handle this case.
