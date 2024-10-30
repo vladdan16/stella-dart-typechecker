@@ -646,6 +646,9 @@ void typecheckPattern(Pattern pattern, StellaType type, Context context) {
 void collectPatternLabels(Pattern pattern, Set<String> matchedLabels) {
   switch (pattern) {
     case PatternVariant(stellaIdent: final label):
+      if (matchedLabels.contains(label)) {
+        throw StellaTypeError.ERROR_DUPLICATE_VARIANT_TYPE_FIELDS;
+      }
       matchedLabels.add(label);
       break;
 
@@ -657,8 +660,27 @@ void collectPatternLabels(Pattern pattern, Set<String> matchedLabels) {
       matchedLabels.add('inr');
       break;
 
-    default:
-      break;
+    case PatternTuple():
+    // TODO: Handle this case.
+    case PatternRecord():
+    // TODO: Handle this case.
+    case PatternList():
+    // TODO: Handle this case.
+    case PatternCons():
+    // TODO: Handle this case.
+    case PatternFalse():
+    // TODO: Handle this case.
+    case PatternTrue():
+    // TODO: Handle this case.
+    case PatternUnit():
+    // TODO: Handle this case.
+    case PatternInt():
+    // TODO: Handle this case.
+    case PatternSucc():
+    // TODO: Handle this case.
+    case PatternVar():
+      // TODO: Handle this case.
+      throw UnimplementedError();
   }
 }
 
