@@ -520,10 +520,52 @@ StellaType typecheckExpression(
 
       return funReturnType;
 
-    case Sequence():
-    // TODO: Handle this case.
-    case Assign():
-    // TODO: Handle this case.
+    case Sequence(expr1: final first, expr2: final second):
+      final firstType = typecheckExpression(first, context, TypeUnit());
+      if (firstType is! TypeUnit) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+      final secondType = typecheckExpression(second, context, expectedType);
+
+      return secondType;
+
+    case Ref(expr: final refExpr):
+      final refType = typecheckExpression(refExpr, context);
+
+      return TypeRef(stellaType: refType);
+
+    case Deref(expr: final derefExpr):
+      final derefType = typecheckExpression(derefExpr, context);
+
+      if (derefType is! TypeRef) {
+        throw StellaTypeError.ERROR_NOT_A_REFERENCE;
+      }
+
+      return derefType.stellaType;
+
+    case Assign(expr1: final target, expr2: final value):
+      final targetType = typecheckExpression(target, context);
+
+      if (targetType is! TypeRef) {
+        throw StellaTypeError.ERROR_NOT_A_REFERENCE;
+      }
+
+      final valueType = typecheckExpression(value, context);
+      if (valueType != targetType.stellaType) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      return TypeUnit();
+
+    case ConstMemory():
+      if (expectedType == null) {
+        throw StellaTypeError.ERROR_AMBIGUOUS_REFERENCE_TYPE;
+      }
+      if (expectedType is! TypeRef) {
+        throw StellaTypeError.ERROR_UNEXPECTED_MEMORY_ADDRESS;
+      }
+      return expectedType;
+
     case LetRec():
     // TODO: Handle this case.
     case TypeAbstraction():
@@ -554,10 +596,6 @@ StellaType typecheckExpression(
     // TODO: Handle this case.
     case LogicAnd():
     // TODO: Handle this case.
-    case Ref():
-    // TODO: Handle this case.
-    case Deref():
-    // TODO: Handle this case.
     case TypeApplication():
     // TODO: Handle this case.
     case Panic():
@@ -575,8 +613,6 @@ StellaType typecheckExpression(
     case Fold():
     // TODO: Handle this case.
     case Unfold():
-    // TODO: Handle this case.
-    case ConstMemory():
       // TODO: Handle this case.
       throw UnimplementedError();
   }
