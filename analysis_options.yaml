@@ -3,3 +3,4 @@ include: package:lints/recommended.yaml
 analyzer:
   exclude:
     - "lib/src/skeleton.dart"
+    - "stella_generated/**"

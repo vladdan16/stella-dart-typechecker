@@ -344,6 +344,117 @@ StellaType typecheckExpression(
 
       return expectedType;
 
+    case Match(expr: final matchExpr, matchCaseList: final matchCaseList):
+      if (matchCaseList.isEmpty) {
+        throw StellaTypeError.ERROR_ILLEGAL_EMPTY_MATCHING;
+      }
+
+      final matchType = typecheckExpression(matchExpr, context);
+      StellaType? resultType;
+      final matchedLabels = <String>{};
+
+      for (final matchCase in matchCaseList) {
+        switch (matchCase) {
+          case AMatchCase():
+            final pattern = matchCase.pattern;
+            final newContext = Context.newFrom(context);
+            typecheckPattern(pattern, matchType, newContext);
+
+            collectPatternLabels(pattern, matchedLabels);
+
+            final caseType =
+                typecheckExpression(matchCase.expr, newContext, expectedType);
+
+            if (resultType == null) {
+              resultType = caseType;
+            } else if (resultType != caseType) {
+              throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+            }
+        }
+      }
+
+      if (resultType != expectedType) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      if (!isPatternExhaustive(matchType, matchedLabels)) {
+        throw StellaTypeError.ERROR_NONEXHAUSTIVE_MATCH_PATTERNS;
+      }
+
+      return resultType ??
+          (throw StellaTypeError.ERROR_NONEXHAUSTIVE_MATCH_PATTERNS);
+
+    case StellaList(exprList: final exprList):
+      if (expectedType == null && exprList.isEmpty) {
+        throw StellaTypeError.ERROR_AMBIGUOUS_LIST_TYPE;
+      }
+
+      if (expectedType != null && expectedType is! TypeList) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      if (expectedType != null &&
+          expectedType is TypeList &&
+          exprList.isEmpty) {
+        return TypeList(stellaType: expectedType.stellaType);
+      }
+
+      final firstType = typecheckExpression(exprList.first, context);
+      for (final expr in exprList.skip(1)) {
+        final exprType = typecheckExpression(expr, context);
+        if (exprType != firstType) {
+          throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+        }
+      }
+
+      final result = TypeList(stellaType: firstType);
+      if (expectedType != null && expectedType != result) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      return result;
+
+    case ConsList(expr1: final head, expr2: final tail):
+      if (expectedType is! TypeList?) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      final headType = typecheckExpression(head, context);
+      final tailType = typecheckExpression(tail, context, headType);
+
+      if (tailType is! TypeList) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      return tailType;
+
+    case Head(expr: final headBody):
+      final headBodyType = typecheckExpression(headBody, context);
+
+      if (headBodyType is! TypeList) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      return headBodyType.stellaType;
+
+    case Tail(expr: final tailBody):
+      final tailBodyType = typecheckExpression(tailBody, context);
+
+      if (tailBodyType is! TypeList) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      return tailBodyType;
+
+    case IsEmpty(expr: final body):
+      final bodyType = typecheckExpression(body, context);
+
+      if (bodyType is! TypeList) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      return TypeBool();
+
     case Sequence():
     // TODO: Handle this case.
     case Assign():
@@ -368,10 +479,6 @@ StellaType typecheckExpression(
     // TODO: Handle this case.
     case Variant():
     // TODO: Handle this case.
-    case Match():
-    // TODO: Handle this case.
-    case StellaList():
-    // TODO: Handle this case.
     case Add():
     // TODO: Handle this case.
     case Subtract():
@@ -389,14 +496,6 @@ StellaType typecheckExpression(
     case Deref():
     // TODO: Handle this case.
     case TypeApplication():
-    // TODO: Handle this case.
-    case ConsList():
-    // TODO: Handle this case.
-    case Head():
-    // TODO: Handle this case.
-    case IsEmpty():
-    // TODO: Handle this case.
-    case Tail():
     // TODO: Handle this case.
     case Panic():
     // TODO: Handle this case.
@@ -427,11 +526,21 @@ void typecheckPattern(Pattern pattern, StellaType type, Context context) {
     case PatternVar(stellaIdent: final name):
       context.addVariable(name, type);
       break;
+
+    case PatternInl(pattern: final innerPattern):
+      if (type is! TypeSum) {
+        throw StellaTypeError.ERROR_UNEXPECTED_PATTERN_FOR_TYPE;
+      }
+      typecheckPattern(innerPattern, type.stellaType1, context);
+      break;
+
+    case PatternInr(pattern: final innerPattern):
+      if (type is! TypeSum) {
+        throw StellaTypeError.ERROR_UNEXPECTED_PATTERN_FOR_TYPE;
+      }
+      typecheckPattern(innerPattern, type.stellaType2, context);
+
     case PatternVariant():
-    // TODO: Handle this case.
-    case PatternInl():
-    // TODO: Handle this case.
-    case PatternInr():
     // TODO: Handle this case.
     case PatternTuple():
     // TODO: Handle this case.
@@ -453,4 +562,33 @@ void typecheckPattern(Pattern pattern, StellaType type, Context context) {
       // TODO: Handle this case.
       throw UnimplementedError();
   }
+}
+
+void collectPatternLabels(Pattern pattern, Set<String> matchedLabels) {
+  switch (pattern) {
+    case PatternVariant(stellaIdent: final label):
+      matchedLabels.add(label);
+      break;
+    case PatternInl():
+      matchedLabels.add('inl');
+      break;
+    case PatternInr():
+      matchedLabels.add('inr');
+      break;
+    default:
+      break;
+  }
+}
+
+bool isPatternExhaustive(StellaType matchType, Set<String> matchedLabels) {
+  if (matchType is TypeVariant) {
+    final variantLabels = matchType.variantFieldTypeList
+        .map((field) => (field as AVariantFieldType).stellaIdent)
+        .toSet();
+    return variantLabels.difference(matchedLabels).isEmpty;
+  } else if (matchType is TypeSum) {
+    final sumLabels = {'inl', 'inr'};
+    return sumLabels.difference(matchedLabels).isEmpty;
+  }
+  return true;
 }
