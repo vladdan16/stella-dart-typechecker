@@ -500,6 +500,26 @@ StellaType typecheckExpression(
 
       return expectedType;
 
+    case Fix(expr: final fixExpr):
+      final fixExprType = typecheckExpression(fixExpr, context, expectedType);
+
+      if (fixExprType is! TypeFun) {
+        throw StellaTypeError.ERROR_NOT_A_FUNCTION;
+      }
+
+      final funReturnType = fixExprType.stellaType;
+      final funParams = fixExprType.stellaTypeList;
+
+      if (funParams.length > 1) {
+        throw StellaTypeError.ERROR_INCORRECT_NUMBER_OF_ARGUMENTS;
+      }
+
+      if (funReturnType != funParams.first) {
+        throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
+      }
+
+      return funReturnType;
+
     case Sequence():
     // TODO: Handle this case.
     case Assign():
@@ -551,8 +571,6 @@ StellaType typecheckExpression(
     case LogicNot():
     // TODO: Handle this case.
     case Pred():
-    // TODO: Handle this case.
-    case Fix():
     // TODO: Handle this case.
     case Fold():
     // TODO: Handle this case.
