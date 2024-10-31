@@ -26,6 +26,8 @@ void typecheck(Program program) {
             stellaTypeList: paramTypes.toIList(),
             stellaType: returnType,
           );
+        } else if (decl is DeclExceptionType) {
+          context.exceptionType = decl.stellaType;
         }
       }
 
@@ -66,8 +68,7 @@ void typecheckDeclaration(Decl decl, Context context) {
         throw StellaTypeError.ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION;
       }
       break;
-    case DeclExceptionType(stellaType: final stellaType):
-      context.exceptionType = stellaType;
+    case DeclExceptionType():
       break;
     case DeclFunGeneric():
     case DeclTypeAlias():

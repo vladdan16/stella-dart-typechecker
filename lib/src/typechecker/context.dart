@@ -4,11 +4,11 @@ class Context {
   final Map<String, StellaType> variables;
   StellaType? exceptionType;
 
-  Context()
-      : variables = {};
+  Context() : variables = {};
 
   Context.newFrom(Context other)
-      : variables = Map<String, StellaType>.from(other.variables);
+      : variables = Map<String, StellaType>.from(other.variables),
+        exceptionType = other.exceptionType;
 
   void addVariable(String name, StellaType type) => variables[name] = type;
 
